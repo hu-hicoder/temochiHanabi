@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線香花火ゲーム - ホスト画面</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="host-container">
+        <header class="host-header">
+            <h1>🎆 線香花火ゲーム - ホスト</h1>
+            <div class="header-info">
+                <span id="gameStatus" class="status-badge waiting">待機中</span>
+                <span id="playerCount" class="player-count">参加者: 0人</span>
+            </div>
+        </header>
+
+        <div class="host-content">
+            <!-- QR Code Section -->
+            <div class="qr-section">
+                <h2>参加者用QRコード</h2>
+                <div id="qrContainer" class="qr-container">
+                    <img id="qrImage" src="" alt="QR Code" style="display: none;">
+                    <div id="qrLoading" class="qr-loading">QRコードを生成中...</div>
+                </div>
+                <p id="playUrl" class="play-url"></p>
+            </div>
+
+            <!-- Control Buttons -->
+            <div class="control-buttons">
+                <button id="startGameBtn" class="btn btn-primary" onclick="startGame()">
+                    🎮 ゲームスタート
+                </button>
+                <button id="resetGameBtn" class="btn btn-secondary" onclick="resetGame()" style="display: none;">
+                    🔄 リセット
+                </button>
+            </div>
+
+            <!-- Sparklers Grid -->
+            <div class="sparklers-grid" id="sparklersGrid">
+                <!-- Individual sparklers will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+    <script src="/static/host.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線香花火ゲーム - プレイ</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="player-container">
+        <header class="player-header">
+            <h1 id="playerNameDisplay">プレイヤー</h1>
+            <p id="gameStatusText" class="game-status">接続中...</p>
+        </header>
+
+        <div class="player-content">
+            <!-- Sparkler Canvas -->
+            <div class="sparkler-display">
+                <canvas id="sparklerCanvas" width="400" height="500"></canvas>
+            </div>
+
+            <!-- Score Indicator -->
+            <div class="score-section">
+                <div class="score-label">揺らがしスコア</div>
+                <div class="score-bar-container">
+                    <div id="scoreBar" class="score-bar" style="width: 0%;"></div>
+                </div>
+                <div class="score-value">
+                    <span id="scoreValue">0</span> / <span id="scoreMax">200</span>
+                </div>
+            </div>
+
+            <!-- Status Message -->
+            <div id="statusMessage" class="status-message">
+                静かにして...
+            </div>
+
+            <!-- Debug Info (hidden by default) -->
+            <div id="debugInfo" class="debug-info" style="display: none;">
+                <div>加速度: <span id="accelDisplay">0, 0, 0</span></div>
+                <div>フレーム: <span id="frameCount">0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+    <script src="/static/sparkler.js"></script>
+    <script src="/static/player.js"></script>
+</body>
+</html>
