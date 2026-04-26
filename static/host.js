@@ -107,10 +107,11 @@ function renderSparklers() {
             playerSparklers[player.player_id] = sparkler;
         }
         
-        // Update sparkler brightness based on movement score
+        // Update sparkler state: time-based progression + shake stress
         if (playerSparklers[player.player_id]) {
             const scoreRatio = Math.min(player.movement_score / 200, 1.0);
-            playerSparklers[player.player_id].setBrightness(scoreRatio);
+            playerSparklers[player.player_id].setStress(scoreRatio);
+            playerSparklers[player.player_id].setBurnStartTime(currentSession.started_at);
             
             // Stop animation if eliminated
             if (player.is_eliminated && playerSparklers[player.player_id].isAnimating) {

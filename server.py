@@ -119,9 +119,8 @@ def handle_disconnect():
 def handle_join_game(data):
     """Handle player joining the game."""
     session_id = data.get('session_id', 'default')
-    player_name = data.get('player_name', f'Player_{uuid.uuid4().hex[:6]}')
     
-    print(f"Player joining: {player_name} to session {session_id}")
+    print(f"Player joining request to session {session_id}")
     
     # Get or create session
     session = game_manager.get_session(session_id)
@@ -132,13 +131,18 @@ def handle_join_game(data):
     if session.status.value != 'waiting':
         emit('join_failed', {'error': 'Game has already started'})
         return
+
+    assigned_name = session.assign_player_name()
+    if not assigned_name:
+        emit('join_failed', {'error': 'This game is full'})
+        return
     
     # Create player
     player_id = str(uuid.uuid4())
     player = Player(
         player_id=player_id,
         session_id=session_id,
-        name=player_name
+        name=assigned_name
     )
     player._socket_id = request.sid  # Store socket ID for later
     
@@ -153,7 +157,7 @@ def handle_join_game(data):
     emit('join_success', {
         'player_id': player_id,
         'session_id': session_id,
-        'player_name': player_name
+        'player_name': assigned_name
     })
     
     # Broadcast updated session state to all in room

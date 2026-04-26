@@ -1,4 +1,5 @@
 import time
+import random
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -60,6 +61,34 @@ class GameSession:
     ended_at: Optional[float] = None
     elimination_threshold: float = 200.0  # Tunable threshold for elimination
     winner_id: Optional[str] = None
+    available_display_names: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        """Prepare per-game shuffled name pool."""
+        if self.available_display_names:
+            return
+
+        self.available_display_names = [
+            "スイカ",
+            "短冊",
+            "風鈴",
+            "金魚",
+            "浴衣",
+            "団扇",
+            "屋台",
+            "花笠",
+            "提灯",
+            "かき氷",
+        ]
+        random.shuffle(self.available_display_names)
+
+    def assign_player_name(self) -> Optional[str]:
+        """Assign a unique display name from the per-session pool."""
+        used_names = {p.name for p in self.players.values()}
+        for candidate in self.available_display_names:
+            if candidate not in used_names:
+                return candidate
+        return None
     
     def add_player(self, player: Player) -> None:
         """Add a player to the session."""

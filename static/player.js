@@ -132,7 +132,7 @@ function sendAccelerometerData() {
 }
 
 /**
- * Update score display and sparkler brightness
+ * Update score display and sparkler stress
  */
 function updateScoreDisplay() {
     const scoreRatio = Math.min(movementScore / scoreThreshold, 1.0);
@@ -154,8 +154,8 @@ function updateScoreDisplay() {
     document.getElementById('scoreValue').textContent = Math.floor(movementScore);
     document.getElementById('scoreMax').textContent = Math.floor(scoreThreshold);
     
-    // Update sparkler brightness
-    sparkler.setBrightness(scoreRatio);
+    // Shake is accumulated as stress only; progression is time-based.
+    sparkler.setStress(scoreRatio);
 }
 
 /**
@@ -185,11 +185,9 @@ function onConnected(data) {
     // Join game with default session
     const urlParams = new URLSearchParams(window.location.search);
     sessionId = urlParams.get('sid') || 'default';
-    playerName = `Player_${Math.random().toString(36).substr(2, 9)}`;
     
     socket.emit('join_game', {
-        session_id: sessionId,
-        player_name: playerName
+        session_id: sessionId
     });
 }
 
@@ -221,6 +219,7 @@ function onJoinFailed(data) {
  */
 function onSessionUpdate(data) {
     currentSession = data.session;
+    sparkler.setBurnStartTime(currentSession.started_at);
     
     if (currentSession.status === 'active') {
         gameActive = true;
@@ -242,6 +241,7 @@ function onSessionUpdate(data) {
 function onGameStarted(data) {
     currentSession = data.session;
     gameActive = true;
+    sparkler.setBurnStartTime(currentSession.started_at);
     document.getElementById('gameStatusText').textContent = 'ゲーム中...';
     updateStatusMessage('静かにして！\n線香花火を揺らさないようにしてください');
 }
