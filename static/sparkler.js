@@ -110,6 +110,18 @@ class SparklerAnimator {
         this.burnProgress = 0;
         this.burnDurationMs = 50000;
         this.burnStartMs = null;
+        this.tiltX = 0;
+        this.tiltY = 0;
+        this.tiltTargetX = 0;
+        this.tiltTargetY = 0;
+        this.maxTiltOffsetX = this.canvas.width * 0.06;
+        this.maxTiltOffsetY = this.canvas.height * 0.02;
+        this.isDropping = false;
+        this.dropFinished = false;
+        this.dropBall = null;
+        this.dropGravity = 0.2;
+        this.stopRequested = false;
+        this.emberGone = false;
 
         this.stickTopY = 58;
         this.stickTipY = this.canvas.height - 150;
@@ -129,6 +141,32 @@ class SparklerAnimator {
      */
     setStress(stressRatio) {
         this.stressRatio = Math.max(0, Math.min(1, stressRatio));
+
+        if (this.stressRatio >= 1) {
+            this.triggerDropAnimation();
+        }
+    }
+
+    triggerDropAnimation() {
+        if (this.isDropping || this.dropFinished) {
+            return;
+        }
+
+        const emitter = this.getEmitter();
+        this.isDropping = true;
+        this.dropBall = {
+            x: emitter.x,
+            y: emitter.y,
+            vx: this.tiltX * 1.2 + (Math.random() - 0.5) * 0.35,
+            vy: 0.9,
+            radius: 5.8,
+            life: 1.0,
+        };
+    }
+
+    setTilt(tiltX, tiltY) {
+        this.tiltTargetX = Math.max(-1, Math.min(1, Number(tiltX) || 0));
+        this.tiltTargetY = Math.max(-1, Math.min(1, Number(tiltY) || 0));
     }
 
     /**
@@ -141,6 +179,10 @@ class SparklerAnimator {
             this.burnProgress = 0;
             this.phase = 0;
             this.brightness = 1.0;
+            this.isDropping = false;
+            this.dropFinished = false;
+            this.dropBall = null;
+            this.emberGone = false;
             return;
         }
 
@@ -150,6 +192,77 @@ class SparklerAnimator {
         }
 
         this.burnStartMs = startedAtNum < 1e12 ? startedAtNum * 1000 : startedAtNum;
+    }
+
+    updateDroppingBall() {
+        if (!this.isDropping || !this.dropBall) {
+            return;
+        }
+
+        this.dropBall.vy += this.dropGravity;
+        this.dropBall.vx *= 0.992;
+        this.dropBall.x += this.dropBall.vx;
+        this.dropBall.y += this.dropBall.vy;
+        this.dropBall.life -= 0.02;
+
+        if (this.frameCount % 2 === 0) {
+            const emberTrail = new Particle(
+                this.dropBall.x,
+                this.dropBall.y,
+                (Math.random() - 0.5) * 0.4,
+                -Math.random() * 0.7,
+                {
+                    size: Math.random() * 1.2 + 0.6,
+                    gravity: 0.05,
+                    friction: 0.94,
+                    fadeSpeed: 0.05,
+                    trail: false,
+                    splittable: false,
+                    hue: 30,
+                    saturation: 88,
+                    lightness: 62,
+                }
+            );
+            emberTrail.maxLife = 0.32;
+            this.particles.push(emberTrail);
+        }
+
+        if (this.dropBall.y > this.canvas.height + 22 || this.dropBall.life <= 0) {
+            this.isDropping = false;
+            this.dropFinished = true;
+            this.dropBall = null;
+            // Once drop finished, ensure ember is gone permanently until reset
+            this.emberGone = true;
+        }
+    }
+
+    drawDroppingBall() {
+        if (!this.dropBall) {
+            return;
+        }
+
+        const ball = this.dropBall;
+        const alpha = Math.max(0, ball.life);
+        const radius = ball.radius * (0.82 + alpha * 0.25);
+
+        const gradient = this.ctx.createRadialGradient(
+            ball.x - 1,
+            ball.y - 1,
+            0,
+            ball.x,
+            ball.y,
+            radius + 4
+        );
+        gradient.addColorStop(0, `rgba(255, 250, 220, ${0.85 * alpha})`);
+        gradient.addColorStop(0.4, `rgba(255, 182, 95, ${0.95 * alpha})`);
+        gradient.addColorStop(1, `rgba(205, 72, 35, ${0.35 * alpha})`);
+
+        this.ctx.save();
+        this.ctx.fillStyle = gradient;
+        this.ctx.beginPath();
+        this.ctx.arc(ball.x, ball.y, radius, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.restore();
     }
 
     updateBurnProgress() {
@@ -169,10 +282,15 @@ class SparklerAnimator {
         this.brightness = Math.max(0.06, 1.0 - endFade * 0.82);
     }
 
+    updateTilt() {
+        this.tiltX += (this.tiltTargetX - this.tiltX) * 0.08;
+        this.tiltY += (this.tiltTargetY - this.tiltY) * 0.08;
+    }
+
     getEmitter() {
         this.ember.wobble += 0.12;
-        const wobbleX = Math.sin(this.ember.wobble) * (0.6 + this.stressRatio * 2.4);
-        const wobbleY = Math.cos(this.ember.wobble * 0.7) * 0.4;
+        const wobbleX = Math.sin(this.ember.wobble) * (0.6 + this.stressRatio * 2.4) + (this.tiltX * this.maxTiltOffsetX);
+        const wobbleY = Math.cos(this.ember.wobble * 0.7) * 0.4 + (this.tiltY * this.maxTiltOffsetY);
 
         this.ember.x = this.canvas.width / 2 + wobbleX;
         this.ember.y = this.stickTipY + 20 + wobbleY;
@@ -185,6 +303,8 @@ class SparklerAnimator {
      * Tsubomi only in this mode.
      */
     emit() {
+        if (this.emberGone) return;
+
         const emitter = this.getEmitter();
         this.sparkClock++;
         this.pulse = Math.sin(this.frameCount * 0.08) * 0.5 + 0.5;
@@ -251,12 +371,15 @@ class SparklerAnimator {
     update() {
         this.frameCount++;
         this.updateBurnProgress();
+        this.updateTilt();
 
         this.ctx.fillStyle = '#0f1218';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         this.drawStick();
-        this.emit();
+        if (!this.isDropping && !this.emberGone) {
+            this.emit();
+        }
 
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
@@ -273,8 +396,23 @@ class SparklerAnimator {
             }
         }
 
-        this.drawEmber();
-        this.drawGlow();
+        if (this.isDropping) {
+            this.updateDroppingBall();
+            this.drawDroppingBall();
+            if (this.dropFinished && this.particles.length === 0) {
+                if (this.stopRequested) {
+                    this.isAnimating = false;
+                    this.stopRequested = false;
+                } else {
+                    this.stop();
+                }
+            }
+        } else {
+            if (!this.emberGone) {
+                this.drawEmber();
+                this.drawGlow();
+            }
+        }
     }
 
     /**
@@ -284,17 +422,23 @@ class SparklerAnimator {
         const centerX = this.canvas.width / 2;
         const baseY = this.stickTopY;
         const tipY = this.stickTipY;
+        const baseX = centerX + (this.tiltX * this.maxTiltOffsetX * 0.35);
+        const tipX = centerX + (this.tiltX * this.maxTiltOffsetX);
+        const tipOffsetY = this.tiltY * this.maxTiltOffsetY;
 
         this.ctx.strokeStyle = '#8B7355';
         this.ctx.lineWidth = 3.5;
         this.ctx.beginPath();
-        this.ctx.moveTo(centerX, baseY);
-        this.ctx.lineTo(centerX, tipY);
+        this.ctx.moveTo(baseX, baseY + (tipOffsetY * 0.1));
+        this.ctx.lineTo(tipX, tipY + tipOffsetY);
         this.ctx.stroke();
 
         this.ctx.fillStyle = '#654321';
         for (let y = baseY; y < tipY; y += 40) {
-            this.ctx.fillRect(centerX - 3, y, 6, 3);
+            const progress = (y - baseY) / (tipY - baseY);
+            const x = baseX + (tipX - baseX) * progress;
+            const yOffset = tipOffsetY * progress;
+            this.ctx.fillRect(x - 3, y + yOffset, 6, 3);
         }
     }
 
@@ -363,6 +507,12 @@ class SparklerAnimator {
      * Stop animation loop
      */
     stop() {
+        // If a drop animation is in progress, defer stopping until it completes
+        if (this.isDropping) {
+            this.stopRequested = true;
+            return;
+        }
+
         this.isAnimating = false;
     }
     

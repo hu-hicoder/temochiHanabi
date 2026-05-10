@@ -75,7 +75,7 @@ function renderSparklers() {
     let html = '';
     for (const player of currentSession.players) {
         const isEliminated = player.is_eliminated;
-        const scoreRatio = Math.min(player.movement_score / 200, 1.0);
+        const scoreRatio = Math.min(player.movement_score / 100, 1.0);
         
         html += `
             <div class="sparkler-item ${isEliminated ? 'eliminated' : ''}">
@@ -109,13 +109,14 @@ function renderSparklers() {
         
         // Update sparkler state: time-based progression + shake stress
         if (playerSparklers[player.player_id]) {
-            const scoreRatio = Math.min(player.movement_score / 200, 1.0);
+            const scoreRatio = Math.min(player.movement_score / 100, 1.0);
             playerSparklers[player.player_id].setStress(scoreRatio);
+            playerSparklers[player.player_id].setTilt(player.tilt_x || 0, player.tilt_y || 0);
             playerSparklers[player.player_id].setBurnStartTime(currentSession.started_at);
             
             // Stop animation if eliminated
             if (player.is_eliminated && playerSparklers[player.player_id].isAnimating) {
-                playerSparklers[player.player_id].stop();
+                playerSparklers[player.player_id].triggerDropAnimation();
             }
         }
     }

@@ -10,11 +10,12 @@ let sessionId = 'default';
 let playerName = null;
 let currentSession = null;
 let movementScore = 0;
-let scoreThreshold = 200;
+let scoreThreshold = 100;
 let gameActive = false;
 
 // Accelerometer data
 let accelData = { x: 0, y: 0, z: 0 };
+let tiltData = { x: 0, y: 0 };
 let frameCount = 0;
 let lastSendTime = 0;
 
@@ -39,12 +40,17 @@ function initPlayer() {
     sparkler = new SparklerAnimator('sparklerCanvas');
     sparkler.start();
     
-    // Request accelerometer permission (iOS 13+)
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    // Request sensor permission (iOS 13+)
+    const needsSensorPermission = (
+        (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') ||
+        (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function')
+    );
+
+    if (needsSensorPermission) {
         showPermissionRequest();
-    } else if (typeof DeviceMotionEvent !== 'undefined') {
+    } else if (typeof DeviceMotionEvent !== 'undefined' || typeof DeviceOrientationEvent !== 'undefined') {
         // Android or older iOS
-        startAccelerometerTracking();
+        startSensorTracking();
     } else {
         updateStatusMessage('このデバイスは加速度センサーに対応していません');
     }
@@ -56,8 +62,8 @@ function initPlayer() {
 function showPermissionRequest() {
     const statusDiv = document.getElementById('statusMessage');
     statusDiv.innerHTML = `
-        <p>加速度センサーへのアクセスを許可してください</p>
-        <button onclick="requestAccelerometerPermission()" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        <p>加速度と傾きのセンサーへのアクセスを許可してください</p>
+        <button onclick="requestSensorPermission()" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
             許可する
         </button>
     `;
@@ -66,30 +72,49 @@ function showPermissionRequest() {
 /**
  * Request accelerometer permission (iOS 13+)
  */
-function requestAccelerometerPermission() {
+function requestSensorPermission() {
+    const permissionRequests = [];
+
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        DeviceMotionEvent.requestPermission()
-            .then(permissionState => {
-                if (permissionState === 'granted') {
-                    startAccelerometerTracking();
-                } else {
-                    updateStatusMessage('加速度センサーの許可が拒否されました');
-                }
-            })
-            .catch(error => {
-                console.error('Permission request error:', error);
-                updateStatusMessage('エラーが発生しました: ' + error.message);
-            });
-    } else {
-        startAccelerometerTracking();
+        permissionRequests.push(DeviceMotionEvent.requestPermission());
     }
+
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        permissionRequests.push(DeviceOrientationEvent.requestPermission());
+    }
+
+    if (permissionRequests.length === 0) {
+        startSensorTracking();
+        return;
+    }
+
+    Promise.all(permissionRequests)
+        .then(permissionStates => {
+            if (permissionStates.some(state => state !== 'granted')) {
+                updateStatusMessage('センサーの許可が拒否されました');
+                return;
+            }
+
+            startSensorTracking();
+        })
+        .catch(error => {
+            console.error('Permission request error:', error);
+            updateStatusMessage('エラーが発生しました: ' + error.message);
+        });
 }
 
 /**
- * Start tracking accelerometer data
+ * Start tracking motion and orientation data
  */
-function startAccelerometerTracking() {
-    window.addEventListener('devicemotion', handleDeviceMotion, true);
+function startSensorTracking() {
+    if (typeof DeviceMotionEvent !== 'undefined') {
+        window.addEventListener('devicemotion', handleDeviceMotion, true);
+    }
+
+    if (typeof DeviceOrientationEvent !== 'undefined') {
+        window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+    }
+
     updateStatusMessage('静かにして...');
 }
 
@@ -108,7 +133,28 @@ function handleDeviceMotion(event) {
     // Update debug display
     updateDebugInfo();
     
-    // Send accelerometer data to server periodically (every 100ms ~10Hz)
+    maybeSendSensorData();
+}
+
+/**
+ * Handle device orientation event (tilt data)
+ */
+function handleDeviceOrientation(event) {
+    const tiltX = Math.max(-1, Math.min(1, (event.gamma || 0) / 45));
+    const tiltY = Math.max(-1, Math.min(1, (event.beta || 0) / 45));
+
+    tiltData.x = tiltX;
+    tiltData.y = tiltY;
+
+    sparkler.setTilt(tiltData.x, tiltData.y);
+
+    maybeSendSensorData();
+}
+
+/**
+ * Send sensor data to server periodically
+ */
+function maybeSendSensorData() {
     const now = Date.now();
     if (now - lastSendTime > 100 && playerId && gameActive) {
         sendAccelerometerData();
@@ -117,7 +163,7 @@ function handleDeviceMotion(event) {
 }
 
 /**
- * Send accelerometer data to server
+ * Send motion and tilt data to server
  */
 function sendAccelerometerData() {
     if (!socket || !playerId || !gameActive) return;
@@ -127,6 +173,8 @@ function sendAccelerometerData() {
         accel_x: accelData.x,
         accel_y: accelData.y,
         accel_z: accelData.z,
+        tilt_x: tiltData.x,
+        tilt_y: tiltData.y,
         timestamp: Date.now()
     });
 }
@@ -255,7 +303,7 @@ function onPlayerEliminated(data) {
     if (eliminatedId === playerId) {
         // Player was eliminated
         gameActive = false;
-        sparkler.stop();
+        sparkler.triggerDropAnimation();
         updateStatusMessage('💥 消えてしまった！');
         document.getElementById('gameStatusText').textContent = '消えてしまった';
     } else {

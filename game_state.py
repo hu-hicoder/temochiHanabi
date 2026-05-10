@@ -20,6 +20,15 @@ class Player:
     name: str = "Player"
     movement_score: float = 0.0
     is_eliminated: bool = False
+    tilt_x: float = 0.0
+    tilt_y: float = 0.0
+    movement_sensitivity: float = 1.8
+    time_score_base_rate: float = 0.12
+    time_score_accel_rate: float = 0.015
+    prev_accel_x: Optional[float] = None
+    prev_accel_y: Optional[float] = None
+    prev_accel_z: Optional[float] = None
+    last_score_time: Optional[float] = None
     joined_at: float = field(default_factory=time.time)
     last_update: float = field(default_factory=time.time)
     
@@ -28,16 +37,61 @@ class Player:
         self.is_eliminated = True
         self.last_update = time.time()
     
-    def add_movement(self, accel_x: float, accel_y: float, accel_z: float) -> float:
+    def add_movement(
+        self,
+        accel_x: float,
+        accel_y: float,
+        accel_z: float,
+        started_at: Optional[float] = None,
+    ) -> float:
         """
-        Add acceleration data to movement score.
-        Uses squared magnitude of acceleration vector.
+        Add acceleration and time-progressive score to movement_score.
+        Movement term uses squared magnitude of delta from previous sample.
+        Time term increases as elapsed game time grows.
         Returns new movement score.
         """
-        magnitude_squared = accel_x**2 + accel_y**2 + accel_z**2
-        self.movement_score += magnitude_squared
-        self.last_update = time.time()
+        now = time.time()
+
+        if self.prev_accel_x is None:
+            self.prev_accel_x = accel_x
+            self.prev_accel_y = accel_y
+            self.prev_accel_z = accel_z
+            self.last_score_time = now
+            self.last_update = now
+            return self.movement_score
+
+        delta_x = accel_x - self.prev_accel_x
+        delta_y = accel_y - self.prev_accel_y
+        delta_z = accel_z - self.prev_accel_z
+        delta_magnitude_squared = delta_x**2 + delta_y**2 + delta_z**2
+        movement_score_delta = delta_magnitude_squared * self.movement_sensitivity
+
+        dt = 0.0
+        if self.last_score_time is not None:
+            dt = max(0.0, now - self.last_score_time)
+
+        elapsed = 0.0
+        if started_at is not None:
+            elapsed = max(0.0, now - started_at)
+
+        # Time pressure grows over time so late-game score rises faster.
+        time_rate = self.time_score_base_rate + (self.time_score_accel_rate * elapsed)
+        time_score_delta = dt * time_rate
+
+        self.movement_score += movement_score_delta + time_score_delta
+
+        self.prev_accel_x = accel_x
+        self.prev_accel_y = accel_y
+        self.prev_accel_z = accel_z
+        self.last_score_time = now
+        self.last_update = now
         return self.movement_score
+
+    def set_tilt(self, tilt_x: float, tilt_y: float) -> None:
+        """Store the latest normalized tilt values for visual animation."""
+        self.tilt_x = tilt_x
+        self.tilt_y = tilt_y
+        self.last_update = time.time()
     
     def to_dict(self):
         """Serialize player to dictionary."""
@@ -46,6 +100,8 @@ class Player:
             "name": self.name,
             "movement_score": round(self.movement_score, 2),
             "is_eliminated": self.is_eliminated,
+            "tilt_x": round(self.tilt_x, 3),
+            "tilt_y": round(self.tilt_y, 3),
             "joined_at": self.joined_at,
         }
 
@@ -59,7 +115,7 @@ class GameSession:
     created_at: float = field(default_factory=time.time)
     started_at: Optional[float] = None
     ended_at: Optional[float] = None
-    elimination_threshold: float = 200.0  # Tunable threshold for elimination
+    elimination_threshold: float = 100.0  # Tunable threshold for elimination
     winner_id: Optional[str] = None
     available_display_names: List[str] = field(default_factory=list)
 
@@ -156,7 +212,7 @@ class GameStateManager:
     def __init__(self):
         self.sessions: Dict[str, GameSession] = {}
     
-    def create_session(self, session_id: str, elimination_threshold: float = 200.0) -> GameSession:
+    def create_session(self, session_id: str, elimination_threshold: float = 100.0) -> GameSession:
         """Create a new game session."""
         session = GameSession(
             session_id=session_id,

@@ -215,9 +215,17 @@ def handle_accelerometer_data(data):
     player = session.players[player_id]
     if player.is_eliminated:
         return
+
+    tilt_x = data.get('tilt_x')
+    tilt_y = data.get('tilt_y')
+    if tilt_x is not None and tilt_y is not None:
+        try:
+            player.set_tilt(float(tilt_x), float(tilt_y))
+        except (TypeError, ValueError):
+            pass
     
-    # Update movement score
-    player.add_movement(accel_x, accel_y, accel_z)
+    # Update movement score (movement + elapsed-time pressure)
+    player.add_movement(accel_x, accel_y, accel_z, started_at=session.started_at)
     
     # Check for eliminations
     eliminated = session.check_eliminations()
