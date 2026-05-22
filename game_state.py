@@ -130,10 +130,9 @@ class GameSession:
             "風鈴",
             "金魚",
             "浴衣",
-            "団扇",
+            "うちわ",
             "屋台",
-            "花笠",
-            "提灯",
+            "ちょうちん",
             "かき氷",
         ]
         random.shuffle(self.available_display_names)

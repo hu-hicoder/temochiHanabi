@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線香花火プレビュー</title>
+    <style>
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            background: #050608;
+            display: grid;
+            place-items: center;
+        }
+
+        canvas {
+            width: min(92vw, 400px);
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 30px 80px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="sparklerCanvas" width="400" height="500"></canvas>
+    <script src="/static/sparkler.js"></script>
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const sparkler = new SparklerAnimator('sparklerCanvas');
+            sparkler.start();
+        });
+    </script>
+</body>
+</html>

@@ -18,14 +18,17 @@ class Particle {
         this.prevX = x;
         this.prevY = y;
         this.trail = options.trail ?? true;
+        this.kind = options.kind ?? 'spark';
+        this.tailScale = options.tailScale ?? 1;
         this.splittable = options.splittable ?? false;
         this.splitChance = options.splitChance ?? 0;
         this.isSplit = options.isSplit ?? false;
 
-        const hue = options.hue ?? (Math.random() * 35 + 22);
-        const saturation = options.saturation ?? (Math.random() * 35 + 60);
-        const lightness = options.lightness ?? (Math.random() * 22 + 58);
-        this.color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        const baseHue = options.hue ?? (Math.random() * 20 + 24);
+        const saturation = options.saturation ?? (Math.random() * 20 + 70);
+        const lightness = options.lightness ?? (Math.random() * 18 + 54);
+        this.color = `hsl(${baseHue}, ${saturation}%, ${lightness}%)`;
+        this.core = `rgba(255,255,230,${0.6 + Math.random() * 0.4})`;
     }
 
     update() {
@@ -41,54 +44,88 @@ class Particle {
 
         this.life -= this.fadeSpeed / this.maxLife;
 
-        if (
-            this.splittable &&
-            !this.isSplit &&
-            this.life < 0.6 &&
-            Math.random() < this.splitChance
-        ) {
+        if (this.splittable && !this.isSplit && this.life < 0.72 && Math.random() < this.splitChance) {
             this.isSplit = true;
-            return [
-                new Particle(this.x, this.y, this.vx + (Math.random() - 0.5) * 0.9, this.vy - Math.random() * 0.5, {
-                    size: Math.max(0.7, this.size * 0.7),
-                    gravity: this.gravity,
-                    friction: this.friction,
-                    fadeSpeed: this.fadeSpeed * 1.2,
-                    trail: this.trail,
+            const burst = [];
+            const burstCount = 2 + Math.floor(Math.random() * 4);
+            for (let i = 0; i < burstCount; i++) {
+                const angle = (Math.random() - 0.5) * 0.9;
+                const speed = 0.6 + Math.random() * 1.5;
+                burst.push(new Particle(this.x, this.y, Math.cos(angle) * speed + this.vx * 0.15, -Math.abs(Math.sin(angle)) * speed * 0.55 + this.vy * 0.15, {
+                    size: Math.max(0.25, this.size * 0.28),
+                    gravity: 0.03 + Math.random() * 0.04,
+                    friction: 0.965,
+                    fadeSpeed: this.fadeSpeed * (1.8 + Math.random() * 0.6),
+                    trail: true,
+                    tailScale: 0.55,
                     splittable: false,
-                }),
-                new Particle(this.x, this.y, this.vx + (Math.random() - 0.5) * 0.9, this.vy - Math.random() * 0.5, {
-                    size: Math.max(0.7, this.size * 0.7),
-                    gravity: this.gravity,
-                    friction: this.friction,
-                    fadeSpeed: this.fadeSpeed * 1.2,
-                    trail: this.trail,
-                    splittable: false,
-                })
-            ];
+                    kind: 'needle',
+                    hue: (Math.random() * 16 + 24),
+                    saturation: 92,
+                    lightness: 68,
+                }));
+            }
+
+            burst.push(new Particle(this.x, this.y, this.vx + (Math.random() - 0.5) * 0.6, this.vy - Math.random() * 0.6, {
+                size: Math.max(0.45, this.size * 0.65),
+                gravity: this.gravity,
+                friction: this.friction,
+                fadeSpeed: this.fadeSpeed * 1.2,
+                trail: true,
+                tailScale: 0.85,
+                splittable: false,
+                kind: 'ember',
+            }));
+
+            return burst;
         }
 
         return null;
     }
 
     draw(ctx) {
-        if (this.trail) {
+        if (this.kind === 'smoke') {
             ctx.save();
-            ctx.strokeStyle = this.color;
-            ctx.globalAlpha = Math.max(0, this.life * 0.45);
-            ctx.lineWidth = Math.max(0.5, this.size * 0.45);
+            ctx.globalCompositeOperation = 'source-over';
+            const smokeAlpha = Math.max(0, this.life * 0.22);
+            ctx.fillStyle = `rgba(180, 175, 165, ${smokeAlpha})`;
             ctx.beginPath();
-            ctx.moveTo(this.prevX, this.prevY);
+            ctx.ellipse(this.x, this.y, this.size * 1.8, this.size * 1.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+
+        if (this.trail && this.kind !== 'ember') {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = this.color;
+            ctx.globalAlpha = this.kind === 'needle' ? Math.max(0, this.life * 0.65) : Math.max(0, this.life * 0.52);
+            ctx.lineWidth = this.kind === 'needle' ? Math.max(0.26, this.size * 0.22) : Math.max(0.28, this.size * 0.26);
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            const tailScale = this.kind === 'needle'
+                ? Math.min(12, 5.5 + Math.hypot(this.vx, this.vy) * 3.6)
+                : this.tailScale;
+            const sx = this.x - this.vx * tailScale;
+            const sy = this.y - this.vy * tailScale;
+            ctx.moveTo(sx, sy);
             ctx.lineTo(this.x, this.y);
             ctx.stroke();
             ctx.restore();
         }
 
         ctx.save();
-        ctx.globalAlpha = this.life;
-        ctx.fillStyle = this.color;
+        ctx.globalCompositeOperation = 'lighter';
+        const radial = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, Math.max(2, this.size * 5.5));
+        radial.addColorStop(0, this.core);
+        radial.addColorStop(0.2, this.color);
+        radial.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = radial;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        const coreSize = this.kind === 'needle' ? Math.max(0.8, this.size * 2.2) : Math.max(1.1, this.size * 3.4);
+        ctx.arc(this.x, this.y, coreSize, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
@@ -123,12 +160,12 @@ class SparklerAnimator {
         this.stopRequested = false;
         this.emberGone = false;
 
-        this.stickTopY = 58;
-        this.stickTipY = this.canvas.height - 150;
+        this.stickTopY = 18;
+        this.stickTipY = this.canvas.height - 220;
 
         this.ember = {
             x: this.canvas.width / 2,
-            y: this.stickTipY + 20,
+            y: this.stickTipY + 10,
             radius: 6.5,
             wobble: 0,
             neckLength: 6,
@@ -309,59 +346,76 @@ class SparklerAnimator {
         this.sparkClock++;
         this.pulse = Math.sin(this.frameCount * 0.08) * 0.5 + 0.5;
 
-        const phaseConfig = {
-            baseCount: 2,
-            speedMin: 0.4,
-            speedMax: 1.2,
-            spread: 0.6,
-            gravity: 0.08,
-            splitChance: 0.0,
-            droop: 0.0,
-        };
-
-        const count = Math.floor(phaseConfig.baseCount * (0.4 + this.brightness * 0.85) * (0.9 + this.pulse * 0.2));
-
-        for (let i = 0; i < count; i++) {
-            const angle = (Math.random() - 0.5) * phaseConfig.spread;
-            const speed = phaseConfig.speedMin + Math.random() * (phaseConfig.speedMax - phaseConfig.speedMin);
-
-            const vx = Math.sin(angle) * speed;
-            const vy = -Math.cos(angle) * speed * (1 - phaseConfig.droop) + speed * phaseConfig.droop;
+        const needleCount = 7 + Math.floor(this.brightness * 4 + this.pulse * 2);
+        for (let i = 0; i < needleCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1.1 + Math.random() * 2.15;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed - 0.08;
 
             const particle = new Particle(emitter.x, emitter.y, vx, vy, {
-                size: Math.random() * 1.6 + 0.6,
-                gravity: phaseConfig.gravity,
-                friction: 0.985,
-                fadeSpeed: 0.015 + Math.random() * 0.014,
+                size: Math.random() * 0.28 + 0.16,
+                gravity: 0.05 + Math.random() * 0.03,
+                friction: 0.988,
+                fadeSpeed: 0.012 + Math.random() * 0.008,
                 trail: true,
+                tailScale: 0.72 + Math.random() * 0.18,
                 splittable: true,
-                splitChance: phaseConfig.splitChance,
+                splitChance: 0.07,
+                kind: 'needle',
+                hue: 26 + Math.random() * 12,
+                saturation: 95,
+                lightness: 69,
             });
-            particle.maxLife = 0.55 + Math.random() * 0.9;
+            particle.maxLife = 0.3 + Math.random() * 0.26;
             this.particles.push(particle);
         }
 
-        // Small trembling bubbles around the ember for "tsubomi" feel.
-        if (this.sparkClock % 3 === 0) {
-            const bubble = new Particle(
+        const emberCount = 1 + (this.sparkClock % 5 === 0 ? 1 : 0);
+        for (let i = 0; i < emberCount; i++) {
+            const ember = new Particle(
                 emitter.x + (Math.random() - 0.5) * 2,
                 emitter.y + (Math.random() - 0.5) * 2,
-                (Math.random() - 0.5) * 0.6,
-                (Math.random() - 0.5) * 0.5,
+                (Math.random() - 0.5) * 0.22,
+                -0.14 - Math.random() * 0.12,
                 {
-                    size: Math.random() * 1.2 + 0.6,
-                    gravity: 0.03,
-                    friction: 0.94,
-                    fadeSpeed: 0.04,
+                    size: Math.random() * 0.45 + 0.25,
+                    gravity: 0.02,
+                    friction: 0.96,
+                    fadeSpeed: 0.03,
                     trail: false,
                     splittable: false,
                     hue: 45,
-                    saturation: 80,
-                    lightness: 72,
+                    saturation: 88,
+                    lightness: 76,
+                    kind: 'ember',
                 }
             );
-            bubble.maxLife = 0.45;
-            this.particles.push(bubble);
+            ember.maxLife = 0.34;
+            this.particles.push(ember);
+        }
+
+        if (this.sparkClock % 2 === 0) {
+            const smoke = new Particle(
+                emitter.x + (Math.random() - 0.5) * 1.5,
+                emitter.y - 4 - Math.random() * 2,
+                (Math.random() - 0.5) * 0.08,
+                -0.28 - Math.random() * 0.18,
+                {
+                    size: Math.random() * 3.2 + 2.4,
+                    gravity: -0.001,
+                    friction: 0.985,
+                    fadeSpeed: 0.03,
+                    trail: false,
+                    splittable: false,
+                    kind: 'smoke',
+                    hue: 30,
+                    saturation: 5,
+                    lightness: 65,
+                }
+            );
+            smoke.maxLife = 0.8 + Math.random() * 0.35;
+            this.particles.push(smoke);
         }
     }
 
@@ -481,11 +535,11 @@ class SparklerAnimator {
      */
     drawGlow() {
         const emitter = this.getEmitter();
-        const glowRadius = 28 + this.brightness * 38;
+        const glowRadius = 16 + this.brightness * 22;
 
         const gradient = this.ctx.createRadialGradient(emitter.x, emitter.y, 0, emitter.x, emitter.y, glowRadius);
-        gradient.addColorStop(0, `rgba(255, 205, 105, ${0.35 + 0.55 * this.brightness})`);
-        gradient.addColorStop(0.5, `rgba(255, 130, 70, ${0.08 + 0.18 * this.brightness})`);
+        gradient.addColorStop(0, `rgba(255, 238, 190, ${0.46 + 0.38 * this.brightness})`);
+        gradient.addColorStop(0.45, `rgba(255, 158, 76, ${0.05 + 0.12 * this.brightness})`);
         gradient.addColorStop(1, 'rgba(255, 200, 100, 0)');
 
         this.ctx.fillStyle = gradient;
